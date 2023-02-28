@@ -1,20 +1,26 @@
-package parseTarget
+package parse_cli
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/ILightThings/AttackParseToolkit/parseFile"
 )
 
 //Similar to crackmapexecs target parameter
 
-func parseTargetParameter(target string) ([]string, error) {
+func ParseParameterStringTarget(target string) ([]string, error) {
 	//If file exist
 
-	if _, err := os.Stat(target); err == nil {
-		fmt.Println("file exist")
-	}
+	//TODO switch this with open file as we will need it anyway
+	_, err := os.Stat(target)
+	if err == nil {
+		targetsFromFile, err1 := parseFile.ParseTagetsFromFile(target)
+		return targetsFromFile, err1
 
-	//not file, parse target
+	} else {
+		stringTarget, err1 := parseFile.ParseTargetString(target)
+		return stringTarget, err1
+	}
 
 }
 
@@ -35,3 +41,5 @@ func parseTargetParameter(target string) ([]string, error) {
                targets.extend(parse_targets(target))
 
 */
+
+//TODO add domain/user:password@target parse like in impacket

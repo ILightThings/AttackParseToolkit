@@ -3,15 +3,16 @@ package parseFile
 import (
 	"bufio"
 	"fmt"
-	"github.com/go-playground/validator/v10"
 	"net"
 	"os"
 	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
 
-func main() {}
+//TODO, Parse NMAP xml for targets
 
-//Parse IPs and CIDRS from file
+// Parse IPs and CIDRS from file
 func ParseTagetsFromFile(filepath string) ([]string, error) {
 
 	//Open File
@@ -37,7 +38,7 @@ func ParseTagetsFromFile(filepath string) ([]string, error) {
 	//Target Parsing
 	var proccessedTarget []string
 	for _, entry := range lines {
-		parseEntry, err := parseTarget(entry)
+		parseEntry, err := ParseTargetString(entry)
 		if err != nil {
 			//log.Print(err)
 			continue
@@ -48,7 +49,7 @@ func ParseTagetsFromFile(filepath string) ([]string, error) {
 
 }
 
-func parseTarget(target string) ([]string, error) {
+func ParseTargetString(target string) ([]string, error) {
 	v := validator.New()
 
 	//CIDR ipv4
@@ -99,7 +100,8 @@ func inc(ip net.IP) {
 	}
 }
 
-//Get FQDN from URL
+// TODO, Finish this
+// Get FQDN from URL
 func parseURL(url string) string {
 	return ""
 

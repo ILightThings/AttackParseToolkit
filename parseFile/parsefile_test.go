@@ -3,14 +3,21 @@ package parseFile
 import (
 	"bufio"
 	"fmt"
-	"golang.org/x/exp/slices"
 	"os"
 	"testing"
+
+	"golang.org/x/exp/slices"
 )
 
 func Test_parseTarget(t *testing.T) {
 
 	err := test_case("testcase/test1.txt", "testcase/test1_results.txt")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	err = test_case("testcase/test2.txt", "testcase/test2_results.txt")
 	if err != nil {
 		t.Error(err)
 		return

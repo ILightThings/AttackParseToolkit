@@ -1,0 +1,6 @@
+host1.light.local
+192.168.10.0/28
+10.10.10.10
+10.10.20.10
+10.20.30.40
+lampsforsale.light
