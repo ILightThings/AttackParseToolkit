@@ -20,6 +20,17 @@ host1.light.local
 lampsforsale.light
 ```
 
+### ParseParameterCredentialImpacket
+A function based off impackets cred parse. Return an ImpacketAuth object.
+
+Currently does not support a target
+
+
+### ParseParameterStringTarget
+
+
+### ToNTHashString
+Returns a string version of an NT hash
 
 
 

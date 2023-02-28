@@ -1,13 +1,28 @@
 package parse_cli
 
 import (
+	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/ILightThings/AttackParseToolkit/parseFile"
 )
 
-//Similar to crackmapexecs target parameter
+type ImpacketAuth struct {
+	Username string
+	Password string
+	Domain   string
+	Target   string
+}
 
+// DOMAIN USER PASSWORD TARGET
+const IMPACKET_TARGET_RE = "(?:(?:([^/@:]*)/)?([^@:]*)(?::([^@]*))?@)?(.*)"
+
+// DOMAIN USER PASSWORD
+const IMPACKET_USER_RE = "(?:(?:([^/:]*)/)?([^:]*)(?::(.*))?)?"
+
+// TODO make unit test for this.
+// Similar to crackmapexecs target parameter
 func ParseParameterStringTarget(target string) ([]string, error) {
 	//If file exist
 
@@ -23,6 +38,29 @@ func ParseParameterStringTarget(target string) ([]string, error) {
 	}
 
 }
+
+func ParseParameterCredentialImpacket(userstring string) (ImpacketAuth, error) {
+	var impacket_cred_obj ImpacketAuth
+	val, err := regexp.MatchString(IMPACKET_USER_RE, userstring)
+	if !val {
+		return impacket_cred_obj, fmt.Errorf("%s is not a valid impacket string", userstring)
+	}
+
+	if err != nil {
+		return impacket_cred_obj, fmt.Errorf("invalid impacket regex pattern %s", IMPACKET_USER_RE)
+	}
+
+	r := regexp.MustCompile(IMPACKET_USER_RE)
+	results := r.FindStringSubmatch(userstring)
+	impacket_cred_obj.Domain = results[1]
+	impacket_cred_obj.Username = results[2]
+	impacket_cred_obj.Password = results[3]
+
+	return impacket_cred_obj, nil
+
+}
+
+//https://github.com/fortra/impacket/blob/8799a1a2c42ad74423841d21ed5f4193ea54f3d5/impacket/examples/utils.py
 
 /*
    if hasattr(args, 'target') and args.target:
