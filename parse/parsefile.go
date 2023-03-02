@@ -1,9 +1,10 @@
-package parseFile
+package parse
 
 import (
 	"bufio"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 
 //TODO, Parse NMAP xml for targets
 
-// Parse IPs and CIDRS from file
+// Parse targets divieded by new line from the specificed file and returns a slice of network targets (IP/FQDN).
 func ParseTagetsFromFile(filepath string) ([]string, error) {
 
 	//Open File
@@ -49,13 +50,16 @@ func ParseTagetsFromFile(filepath string) ([]string, error) {
 
 }
 
+// ParseTargetString will parse the target string and extract a slice of FQDN/IPs that can be used in a network attacks.
+// Currently support CIDRv4, IP address, URL, FQDN.
 func ParseTargetString(target string) ([]string, error) {
 	v := validator.New()
 
 	//CIDR ipv4
 	err := v.Var(target, "cidr")
 	if err == nil {
-		return parseCIDR(target), nil
+		CIDR_Targets, err := ParseCIDR(target)
+		return CIDR_Targets, err
 	}
 
 	//IPv4 or IPv6 Address
@@ -81,16 +85,21 @@ func ParseTargetString(target string) ([]string, error) {
 
 }
 
-func parseCIDR(cidrString string) []string {
+// Parse a CIDR notation and returns a slice of IP address with in that CIDR
+func ParseCIDR(cidrString string) ([]string, error) {
 	var cidrIPs []string
-	ip, cidr, _ := net.ParseCIDR(cidrString)
+	ip, cidr, err := net.ParseCIDR(cidrString)
+	if err != nil {
+		return []string{}, err
+	}
 	for ip := ip.Mask(cidr.Mask); cidr.Contains(ip); inc(ip) {
 		cidrIPs = append(cidrIPs, ip.String())
 
 	}
-	return cidrIPs
+	return cidrIPs, nil
 }
 
+// increase IP by 1
 func inc(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		ip[j]++
@@ -100,9 +109,9 @@ func inc(ip net.IP) {
 	}
 }
 
-// TODO, Finish this
 // Get FQDN from URL
-func parseURL(url string) string {
-	return ""
+func parseURL(targeturl string) string {
+	hostname, _ := url.Parse(targeturl)
+	return hostname.Hostname()
 
 }

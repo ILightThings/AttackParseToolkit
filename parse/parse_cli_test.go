@@ -1,4 +1,4 @@
-package parse_cli
+package parse
 
 import (
 	"testing"

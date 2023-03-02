@@ -1,44 +1,44 @@
-package parse_cli
+package parse
 
 import (
 	"fmt"
 	"os"
 	"regexp"
-
-	"github.com/ILightThings/AttackParseToolkit/parseFile"
 )
 
 type ImpacketAuth struct {
 	Username string
 	Password string
 	Domain   string
-	Target   string
 }
 
+// Currently not implemented
 // DOMAIN USER PASSWORD TARGET
 const IMPACKET_TARGET_RE = "(?:(?:([^/@:]*)/)?([^@:]*)(?::([^@]*))?@)?(.*)"
 
+// IMPACKET Regex for Creds
 // DOMAIN USER PASSWORD
 const IMPACKET_USER_RE = "(?:(?:([^/:]*)/)?([^:]*)(?::(.*))?)?"
 
 // TODO make unit test for this.
-// Similar to crackmapexecs target parameter
+// Similar to crackmapexecs target parameter. Will detect if the target is a file, IP string, FQDN string and returns a slice of targets.
 func ParseParameterStringTarget(target string) ([]string, error) {
 	//If file exist
 
 	//TODO switch this with open file as we will need it anyway
 	_, err := os.Stat(target)
 	if err == nil {
-		targetsFromFile, err1 := parseFile.ParseTagetsFromFile(target)
+		targetsFromFile, err1 := ParseTagetsFromFile(target)
 		return targetsFromFile, err1
 
 	} else {
-		stringTarget, err1 := parseFile.ParseTargetString(target)
+		stringTarget, err1 := ParseTargetString(target)
 		return stringTarget, err1
 	}
 
 }
 
+// ParseParameterCredentialImpacket will parse the string to extract a domain,user,password in a fashion similar to impacket. Returns a ImpacketAuth struc
 func ParseParameterCredentialImpacket(userstring string) (ImpacketAuth, error) {
 	var impacket_cred_obj ImpacketAuth
 	val, err := regexp.MatchString(IMPACKET_USER_RE, userstring)

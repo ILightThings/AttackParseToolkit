@@ -7,6 +7,7 @@ import (
 	"golang.org/x/crypto/md4"
 )
 
+// ToNTHash will turn a string into a byte slice representation of a NTLM hash
 func ToNTHash(in string) []byte {
 	/* Prepare a byte array to return */
 	var u16 []byte
@@ -26,9 +27,9 @@ func ToNTHash(in string) []byte {
 
 }
 
+// ToNTHash will turn a string into a hex string representation of a NTLM hash. Useful for pass the hash attacks
 func ToNTHashString(password string) string {
 	hash := ToNTHash(password)
 	encodedString := hex.EncodeToString(hash)
 	return strings.ToUpper(encodedString)
-
 }
