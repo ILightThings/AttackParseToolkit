@@ -12,7 +12,7 @@ import (
 //TODO build a config folder function
 //TODO build a function that makes a default config file
 
-// Creates a yaml config file with the de
+// Creates a yaml config file from a struct.
 func GenerateYAMLConfigFile(configFolderPath string, configFileName string, configContents interface{}) error {
 
 	yamlData, err := yaml.Marshal(&configContents)
