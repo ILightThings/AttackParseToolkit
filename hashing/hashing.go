@@ -1,6 +1,8 @@
 package hashing
 
 import (
+	"crypto/hmac"
+	"crypto/md5"
 	"encoding/hex"
 	"strings"
 
@@ -32,4 +34,10 @@ func ToNTHashString(password string) string {
 	hash := ToNTHash(password)
 	encodedString := hex.EncodeToString(hash)
 	return strings.ToUpper(encodedString)
+}
+
+func genHMACMD5(key []byte, n []byte) ([]byte, error) {
+	hasher := hmac.New(md5.New, key)
+	_, err := hasher.Write(n)
+	return hasher.Sum(nil), err
 }

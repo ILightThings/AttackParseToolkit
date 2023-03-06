@@ -2,8 +2,6 @@ package hashing
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/md5"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -80,12 +78,6 @@ func GenerateNTLMv2ChallengeProof(challenge []byte, password string, ntlmhash []
 
 }
 
-func genHMACMD5(key []byte, n []byte) ([]byte, error) {
-	hasher := hmac.New(md5.New, key)
-	_, err := hasher.Write(n)
-	return hasher.Sum(nil), err
-}
-
 type NTLMSSP_Challenge struct {
 	NTLMSSP_identifier []byte // 8 bytes offset 0
 	NTLM_Message_Type  []byte // 4 bytes, offset 8
@@ -97,6 +89,38 @@ type NTLMSSP_Challenge struct {
 	Version            []byte // 8 bytes, offset 48
 }
 
+// Prints a human readble verson of the NTLMSSP_Challenge to the console
+func (a *NTLMSSP_Challenge) Readable() error {
+	pr_TargetName, err := encodeutil.DecodeUTF16leBytes(a.NTLM_Message_Type)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Target Name %s\n", pr_TargetName)
+
+	fmt.Println("Flags:")
+	flags := binary.LittleEndian.Uint32(a.NetgotiateFlags)
+	flagsReadable := getHumanNegoFlagNames(flags)
+	for _, x := range flagsReadable {
+		fmt.Println(x)
+	}
+
+	fmt.Printf("\nServer Challenge: %#v\n", a.ServerChallenge)
+
+	//targetInfo_PR :=
+
+	versionParse, err := getVersion(a.Version)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Version Code: %s\n", versionParse.HumanString())
+
+	return nil
+
+}
+
+// Parses the NTLMSSP_Challenge to a NTLMSSP_Challenge struct
 // TODO implement the getByteLocation into this parser to make it easier to read
 func ParseNTLMSSP_Challenge(NTLMSSP_Challenge_Bytes []byte) (NTLMSSP_Challenge, error) {
 	var NTSSPObj NTLMSSP_Challenge
@@ -155,6 +179,10 @@ type NTLMSSP_Auth struct {
 	MIC                  []byte // 8 bytes, offset 68 //
 }
 
+func (a *NTLMSSP_Auth) Readable() {
+
+}
+
 func ParseNTLMSSP_Auth(NTLMSSP_Auth_Bytes []byte) (NTLMSSP_Auth, error) {
 
 	var NTSSPObj NTLMSSP_Auth
@@ -182,6 +210,35 @@ func ParseNTLMSSP_Auth(NTLMSSP_Auth_Bytes []byte) (NTLMSSP_Auth, error) {
 	UserNameStart, UsernameEnd := getByteLocation(UserNameFields)
 	NTSSPObj.User_name = NTLMSSP_Auth_Bytes[UserNameStart:UsernameEnd]
 
+	WorkstationFields := NTLMSSP_Auth_Bytes[44:52]
+	WorkstationStart, WorkStationEnd := getByteLocation(WorkstationFields)
+	NTSSPObj.Host_name = NTLMSSP_Auth_Bytes[WorkstationStart:WorkStationEnd]
+
+	EncryptedRandomSessionKeyFields := NTLMSSP_Auth_Bytes[52:60]
+	SessionKeyStart, SessionKeyEnd := getByteLocation(EncryptedRandomSessionKeyFields)
+	NTSSPObj.Session_Key = NTLMSSP_Auth_Bytes[SessionKeyStart:SessionKeyEnd]
+
+	NTSSPObj.Negotiate_Flags = NTLMSSP_Auth_Bytes[60:64]
+
+	flags := binary.LittleEndian.Uint32(NTSSPObj.Negotiate_Flags)
+
+	//TODO MIC and Version fields are dependant on the Flags that require them.
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEVERSION == negotiateFlagNTLMSSPNEGOTIATEVERSION {
+		NTSSPObj.Version = NTLMSSP_Auth_Bytes[64:72]
+		if flags&negotiateFlagNTLMSSPNEGOTIATESIGN == negotiateFlagNTLMSSPNEGOTIATESIGN {
+			NTSSPObj.MIC = NTLMSSP_Auth_Bytes[72:88]
+		}
+
+	} else {
+		if flags&negotiateFlagNTLMSSPNEGOTIATESIGN == negotiateFlagNTLMSSPNEGOTIATESIGN {
+			NTSSPObj.MIC = NTLMSSP_Auth_Bytes[64:80]
+		}
+	}
+
+	//TODO add test cases for this
+	return NTSSPObj, nil
+
 }
 
 // Get the starting and ending points between two numbers
@@ -193,4 +250,138 @@ func getByteLocation(fields []byte) (int, int) {
 	EndByte := StartByte + (binary.LittleEndian.Uint16(Len))
 
 	return int(StartByte), int(EndByte)
+}
+
+// Return a slice of human readable flags
+func getHumanNegoFlagNames(flags uint32) []string {
+	var flagsHumanReadable []string
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEUNICODE == negotiateFlagNTLMSSPNEGOTIATEUNICODE {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_UNICODE")
+	}
+	if flags&negotiateFlagNTLMNEGOTIATEOEM == negotiateFlagNTLMNEGOTIATEOEM {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLM_NEGOTIATE_OEM")
+	}
+
+	if flags&negotiateFlagNTLMSSPREQUESTTARGET == negotiateFlagNTLMSSPREQUESTTARGET {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_REQUEST_TARGET")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATESIGN == negotiateFlagNTLMSSPNEGOTIATESIGN {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_SIGN")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATESEAL == negotiateFlagNTLMSSPNEGOTIATESEAL {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_SEAL")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEDATAGRAM == negotiateFlagNTLMSSPNEGOTIATEDATAGRAM {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_DATAGRAM")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATELMKEY == negotiateFlagNTLMSSPNEGOTIATELMKEY {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_LM_KEY")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATENTLM == negotiateFlagNTLMSSPNEGOTIATENTLM {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_NTLM")
+	}
+
+	if flags&negotiateFlagANONYMOUS == negotiateFlagANONYMOUS {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_ANONYMOUS")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEOEMDOMAINSUPPLIED == negotiateFlagNTLMSSPNEGOTIATEOEMDOMAINSUPPLIED {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_OEM_DOMAIN_SUPPLIED")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEOEMWORKSTATIONSUPPLIED == negotiateFlagNTLMSSPNEGOTIATEOEMWORKSTATIONSUPPLIED {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_OEM_WORKSTATION_SUPPLIED")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEALWAYSSIGN == negotiateFlagNTLMSSPNEGOTIATEALWAYSSIGN {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_ALWAYS_SIGN")
+	}
+
+	if flags&negotiateFlagNTLMSSPTARGETTYPEDOMAIN == negotiateFlagNTLMSSPTARGETTYPEDOMAIN {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_TARGET_TYPE_DOMAIN")
+	}
+
+	if flags&negotiateFlagNTLMSSPTARGETTYPESERVER == negotiateFlagNTLMSSPTARGETTYPESERVER {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_TARGET_TYPE_SERVER")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEEXTENDEDSESSIONSECURITY == negotiateFlagNTLMSSPNEGOTIATEEXTENDEDSESSIONSECURITY {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEIDENTIFY == negotiateFlagNTLMSSPNEGOTIATEIDENTIFY {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_IDENTIFY")
+	}
+
+	if flags&negotiateFlagNTLMSSPREQUESTNONNTSESSIONKEY == negotiateFlagNTLMSSPREQUESTNONNTSESSIONKEY {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_REQUEST_NON_NT_SESSION_KEY")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATETARGETINFO == negotiateFlagNTLMSSPNEGOTIATETARGETINFO {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_TARGET_INFO")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEVERSION == negotiateFlagNTLMSSPNEGOTIATEVERSION {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_VERSION")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATE128 == negotiateFlagNTLMSSPNEGOTIATE128 {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_128")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATEKEYEXCH == negotiateFlagNTLMSSPNEGOTIATEKEYEXCH {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_KEY_EXCH")
+	}
+
+	if flags&negotiateFlagNTLMSSPNEGOTIATE56 == negotiateFlagNTLMSSPNEGOTIATE56 {
+		flagsHumanReadable = append(flagsHumanReadable, "NTLMSSP_NEGOTIATE_56")
+	}
+
+	return flagsHumanReadable
+
+}
+
+type VersionStruct struct {
+	ProductMajor []byte //1 bytes, offset 0
+	ProductMinor []byte //1 bytes, offset 1
+	ProductBuild []byte //2 bytes, offset 2
+	Reserved     []byte //3 bytes, offset 4
+	NTLMVersion  []byte //1 bytes, offset 7 ?
+}
+
+// TODO find the formatting and finsih this
+func (v *VersionStruct) HumanString() string {
+	return ""
+
+}
+
+func getVersion(a []byte) (VersionStruct, error) {
+	if len(a) != 8 {
+		return VersionStruct{}, fmt.Errorf("byte slice size is not the required size for a version struct\n Expected: 8\nGot: %d", len(a))
+	}
+
+	var v VersionStruct
+	v.ProductMajor = []byte{a[0]}
+	v.ProductMinor = []byte{a[1]}
+	v.ProductBuild = a[2:4]
+	v.Reserved = a[4:7]
+	v.NTLMVersion = []byte{a[8]}
+
+	return v, nil
+}
+
+// TODO figure out how to parse AVID
+type AVID struct {
+}
+
+// Returns a readable version of Target Info.
+// 2.2.2.1 AV_PAIR https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-NLMP/%5bMS-NLMP%5d.pdf
+func getHumanNegoTargetInfo() {
+
 }
