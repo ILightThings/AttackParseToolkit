@@ -57,15 +57,23 @@ func GenNTOWFv2(user string, domain string, password string, ntlmhash []byte) ([
 
 }
 
+//TODO build func GenLMOWFv1 for NTLMv1 support
+
+// LOL I know its the same as GenNTOWFv2 but shutup
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/5e550938-91d4-459f-b67d-75d70009e3f3
+func GenLMOWFv2(user string, domain string, password string, ntlmhash []byte) ([]byte, error) {
+	stage1, err := GenNTOWFv2(user, domain, password, ntlmhash)
+	return stage1, err
+
+}
+
 // ntProofStr
 // Hash or Password
 func GenerateNTLMv2ChallengeProof(challenge []byte, password string, ntlmhash []byte, username string, domain string, blob []byte) ([]byte, error) {
-
 	NTFOv2, err := GenNTOWFv2(username, domain, password, ntlmhash)
 	if err != nil {
 		return []byte{}, err
 	}
-
 	challengeBlob := append(challenge, blob...)
 
 	stage2, err := genHMACMD5(NTFOv2, challengeBlob)
@@ -73,9 +81,7 @@ func GenerateNTLMv2ChallengeProof(challenge []byte, password string, ntlmhash []
 	if err != nil {
 		return []byte{}, err
 	}
-
 	return stage2, nil
-
 }
 
 type NTLMSSP_Challenge struct {
@@ -355,11 +361,17 @@ type VersionStruct struct {
 	NTLMVersion  []byte //1 bytes, offset 7 ?
 }
 
-// TODO find the formatting and finsih this
+// Returns a version string
 func (v *VersionStruct) HumanString() string {
-	return ""
+	major := binary.LittleEndian.Uint16(v.ProductMajor)
+	minor := binary.LittleEndian.Uint16(v.ProductMinor)
+	build := binary.LittleEndian.Uint16(v.ProductBuild)
+
+	return fmt.Sprintf("Version %d.%d (Build %d)", major, minor, build)
 
 }
+
+//TODO build a database of windows versions
 
 func getVersion(a []byte) (VersionStruct, error) {
 	if len(a) != 8 {
