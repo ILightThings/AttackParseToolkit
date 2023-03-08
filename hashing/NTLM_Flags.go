@@ -43,3 +43,11 @@ const (
 	/*V*/ negotiateFlagNTLMSSPNEGOTIATEKEYEXCH = 1 << 30
 	/*W*/ negotiateFlagNTLMSSPNEGOTIATE56 = 1 << 31
 )
+
+type NTLMMessageType uint32
+
+const (
+	NEGOTIATE_MESSAGE = iota + 1
+	CHALLENGE_MESSAGE
+	AUTHENTICATE_MESSAGE
+)

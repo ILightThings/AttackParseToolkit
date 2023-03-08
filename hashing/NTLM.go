@@ -24,7 +24,7 @@ NTLMv2 Response = NTLMv2 Goodies + blob
 */
 
 //USERNAME https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-NLMP/%5bMS-NLMP%5d.pdf 3.3.2
-// user is upper case, domain is uppercase contactinated
+// user is upper case, domain is concat
 //https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/5e550938-91d4-459f-b67d-75d70009e3f3
 //https://en.hackndo.com/ntlm-relay/
 //https://github.com/fortra/impacket/blob/f4b848fa27654ca95bc0f4c73dbba8b9c2c9f30a/impacket/ntlm.py#L894
@@ -85,46 +85,47 @@ func GenerateNTLMv2ChallengeProof(challenge []byte, password string, ntlmhash []
 	return stage2, nil
 }
 
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/aee311d6-21a7-4470-92a5-c4ecb022a87b?source=recommendations
+type NTLMv2_CLIENT_CHALLENGE struct {
+	RespType            []byte `ntlmssp:"hexstring"` // 1 bytes, offset 0
+	HiRespType          []byte `ntlmssp:"hexstring"` // 1 bytes, offset 1
+	Reserved1           []byte `ntlmssp:"hexstring"` // 2 bytes, offset 2 // Needs to be 00 00
+	Reserved2           []byte `ntlmssp:"hexstring"` // 4 bytes, offset 4 // Needs to be 00 00 00 00
+	TimeStamp           []byte `ntlmssp:"time"`      // 8 bytes offset 8
+	ChallengeFromClient []byte `ntlmssp:"hexstring"` // 8 bytes offset 16
+	Reserved3           []byte `ntlmssp:"hexstring"` // 4 bytes offset 24 // Needs to be 00 00 00 00
+	AvPairs             []byte `ntlmssp:"hexstring"` // Variable bytes, offset 28
+}
+
+func (a *NTLMv2_CLIENT_CHALLENGE) Readable() {
+	PrintNTLMSSPStruc(*a)
+}
+
+// https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-nlmp/d43e2224-6fc3-449d-9f37-b90b55a29c80
+type NTLMv2_Responce struct {
+	Responce  []byte `ntlmssp:"hexstring"` // 16 bytes, offset 0  // Result of GenerateNTLMv2ChallengeProof
+	Challenge []byte `ntlmssp:"hexstring"` // Variable, offset 16 // Direct copy from NTLMv2_CLIENT_CHALLENGE
+}
+
+func (a *NTLMv2_Responce) Readable() {
+	PrintNTLMSSPStruc(*a)
+}
+
+// Rename these to follow the offical whitepaper name
 type NTLMSSP_Challenge struct {
-	NTLMSSP_identifier []byte // 8 bytes offset 0
-	NTLM_Message_Type  []byte // 4 bytes, offset 8
-	TargetName         []byte // 8 bytes, offset 12
-	NetgotiateFlags    []byte // 4 bytes, offset 20
-	ServerChallenge    []byte // 8 bytes, offset 24
-	Reserver           []byte // 8 bytes, offset 32
-	TargetInfo         []byte // 8 bytes, offset 40
-	Version            []byte // 8 bytes, offset 48
+	Signature       []byte `ntlmssp:"identifyer"`     // 8 bytes offset 0
+	MessageType     []byte `ntlmssp:"MessageType"`    // 4 bytes, offset 8
+	TargetName      []byte `ntlmssp:"utf16lestring"`  // 8 bytes, offset 12
+	NegotiateFlags  []byte `ntlmssp:"NegotiateFlags"` // 4 bytes, offset 20
+	ServerChallenge []byte `ntlmssp:"hexstring"`      // 8 bytes, offset 24
+	Reserved        []byte `ntlmssp:"hexstring"`      // 8 bytes, offset 32
+	TargetInfo      []byte `ntlmssp:"AV_Pair"`        // 8 bytes, offset 40 //AVID
+	Version         []byte `ntlmssp:"version"`        // 8 bytes, offset 48
 }
 
 // Prints a human readble verson of the NTLMSSP_Challenge to the console
-func (a *NTLMSSP_Challenge) Readable() error {
-	pr_TargetName, err := encodeutil.DecodeUTF16leBytes(a.TargetName)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Target Name %s\n", pr_TargetName)
-
-	fmt.Println("Flags:")
-	flags := binary.LittleEndian.Uint32(a.NetgotiateFlags)
-	flagsReadable := getHumanNegoFlagNames(flags)
-	for _, x := range flagsReadable {
-		fmt.Println(x)
-	}
-
-	fmt.Printf("\nServer Challenge: %#v\n", a.ServerChallenge)
-
-	//targetInfo_PR :=
-
-	versionParse, err := getVersion(a.Version)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Version Code: %s\n", versionParse.HumanString())
-
-	return nil
-
+func (a *NTLMSSP_Challenge) Readable() {
+	PrintNTLMSSPStruc(*a)
 }
 
 // Parses the NTLMSSP_Challenge to a NTLMSSP_Challenge struct
@@ -138,9 +139,9 @@ func ParseNTLMSSP_Challenge(NTLMSSP_Challenge_Bytes []byte) (NTLMSSP_Challenge, 
 
 	}
 
-	//TODO, each of these headers should be a property of the NTLMSSPObj
-	//TODO, rename the NTLMSSPobj to NTLMSSPChallenge
+	NTSSPObj.MessageType = NTLMSSP_Challenge_Bytes[8:12]
 
+	//TODO, each of these headers should be a property of the NTLMSSPObj
 	//TargetName
 	TargetNameHeader := NTLMSSP_Challenge_Bytes[12:20]
 	TargetNameLen := TargetNameHeader[0:2]
@@ -152,7 +153,7 @@ func ParseNTLMSSP_Challenge(NTLMSSP_Challenge_Bytes []byte) (NTLMSSP_Challenge, 
 	NTSSPObj.TargetName = NTLMSSP_Challenge_Bytes[binary.LittleEndian.Uint16(TargetNameBufferOffset) : binary.LittleEndian.Uint16(TargetNameBufferOffset)+binary.LittleEndian.Uint16(TargetNameLen)]
 
 	//Flags
-	NTSSPObj.NetgotiateFlags = NTLMSSP_Challenge_Bytes[20:24]
+	NTSSPObj.NegotiateFlags = NTLMSSP_Challenge_Bytes[20:24]
 
 	//Server Challenge
 	NTSSPObj.ServerChallenge = NTLMSSP_Challenge_Bytes[24:32]
@@ -173,20 +174,21 @@ func ParseNTLMSSP_Challenge(NTLMSSP_Challenge_Bytes []byte) (NTLMSSP_Challenge, 
 }
 
 type NTLMSSP_Auth struct {
-	NTLMSSP_identifier   []byte // 8 bytes, offset 0
-	NTLM_Message_Type    []byte // 4 bytes, offset 8
-	Lan_Manager_Response []byte // 8 bytes, offset 12
-	NTLM_Response        []byte // 8 bytes, offset 20
-	Domain_name          []byte // 8 bytes, offset 28
-	User_name            []byte // 8 bytes, offset 36
-	Host_name            []byte // 8 bytes, offset 44
-	Session_Key          []byte // 8 bytes, offset 52
-	Negotiate_Flags      []byte // 4 bytes, offset 56
-	Version              []byte // 8 bytes, offset 60 //that SHOULD be populated only when the NTLMSSP_NEGOTIATE_VERSION flag is set in the NegotiateFlags field
-	MIC                  []byte // 8 bytes, offset 68 //
+	Signature                 []byte `ntlmssp:"identifyer"`     // 8 bytes, offset 0
+	MessageType               []byte `ntlmssp:"MessageType"`    // 4 bytes, offset 8
+	LmChallengeResponse       []byte `ntlmssp:"hexstring"`      // 8 bytes, offset 12
+	NtChallengeResponse       []byte `ntlmssp:"hexstring"`      // 8 bytes, offset 20
+	DomainName                []byte `ntlmssp:"utf16lestring"`  // 8 bytes, offset 28
+	UserName                  []byte `ntlmssp:"utf16lestring"`  // 8 bytes, offset 36
+	Workstation               []byte `ntlmssp:"utf16lestring"`  // 8 bytes, offset 44
+	EncryptedRandomSessionKey []byte `ntlmssp:"hexstring"`      // 8 bytes, offset 52
+	NegotiateFlags            []byte `ntlmssp:"NegotiateFlags"` // 4 bytes, offset 60
+	Version                   []byte `ntlmssp:"version"`        // 8 bytes, Variable Offset //that SHOULD be populated only when the NTLMSSP_NEGOTIATE_VERSION flag is set in the NegotiateFlags field
+	MIC                       []byte `ntlmssp:"hexstring"`      // 8 bytes, Variable Offset
 }
 
 func (a *NTLMSSP_Auth) Readable() {
+	PrintNTLMSSPStruc(*a)
 
 }
 
@@ -199,37 +201,37 @@ func ParseNTLMSSP_Auth(NTLMSSP_Auth_Bytes []byte) (NTLMSSP_Auth, error) {
 		return NTSSPObj, errors.New("NTLMSSP Header is not correct")
 	}
 
-	NTSSPObj.NTLM_Message_Type = NTLMSSP_Auth_Bytes[8:12]
+	NTSSPObj.MessageType = NTLMSSP_Auth_Bytes[8:12]
 
 	LanResponceFields := NTLMSSP_Auth_Bytes[12:20]
 	lmStart, lmEnd := getByteLocation(LanResponceFields)
-	NTSSPObj.Lan_Manager_Response = NTLMSSP_Auth_Bytes[lmStart:lmEnd]
+	NTSSPObj.LmChallengeResponse = NTLMSSP_Auth_Bytes[lmStart:lmEnd]
 
 	NtChallengeResponseFields := NTLMSSP_Auth_Bytes[20:28]
 	NtChallStart, NtChallEnd := getByteLocation(NtChallengeResponseFields)
-	NTSSPObj.NTLM_Response = NTLMSSP_Auth_Bytes[NtChallStart:NtChallEnd]
+	NTSSPObj.NtChallengeResponse = NTLMSSP_Auth_Bytes[NtChallStart:NtChallEnd]
 
 	DomainNameFields := NTLMSSP_Auth_Bytes[28:36]
 	DomainNameStart, DomainNameEnd := getByteLocation(DomainNameFields)
-	NTSSPObj.Domain_name = NTLMSSP_Auth_Bytes[DomainNameStart:DomainNameEnd]
+	NTSSPObj.DomainName = NTLMSSP_Auth_Bytes[DomainNameStart:DomainNameEnd]
 
 	UserNameFields := NTLMSSP_Auth_Bytes[36:44]
 	UserNameStart, UsernameEnd := getByteLocation(UserNameFields)
-	NTSSPObj.User_name = NTLMSSP_Auth_Bytes[UserNameStart:UsernameEnd]
+	NTSSPObj.UserName = NTLMSSP_Auth_Bytes[UserNameStart:UsernameEnd]
 
 	WorkstationFields := NTLMSSP_Auth_Bytes[44:52]
 	WorkstationStart, WorkStationEnd := getByteLocation(WorkstationFields)
-	NTSSPObj.Host_name = NTLMSSP_Auth_Bytes[WorkstationStart:WorkStationEnd]
+	NTSSPObj.Workstation = NTLMSSP_Auth_Bytes[WorkstationStart:WorkStationEnd]
 
 	EncryptedRandomSessionKeyFields := NTLMSSP_Auth_Bytes[52:60]
 	SessionKeyStart, SessionKeyEnd := getByteLocation(EncryptedRandomSessionKeyFields)
-	NTSSPObj.Session_Key = NTLMSSP_Auth_Bytes[SessionKeyStart:SessionKeyEnd]
+	NTSSPObj.EncryptedRandomSessionKey = NTLMSSP_Auth_Bytes[SessionKeyStart:SessionKeyEnd]
 
-	NTSSPObj.Negotiate_Flags = NTLMSSP_Auth_Bytes[60:64]
+	NTSSPObj.NegotiateFlags = NTLMSSP_Auth_Bytes[60:64]
 
-	flags := binary.LittleEndian.Uint32(NTSSPObj.Negotiate_Flags)
+	flags := binary.LittleEndian.Uint32(NTSSPObj.NegotiateFlags)
 
-	//TODO MIC and Version fields are dependant on the Flags that require them.
+	// MIC and Version fields are dependant on the Flags that require them.
 
 	if flags&negotiateFlagNTLMSSPNEGOTIATEVERSION == negotiateFlagNTLMSSPNEGOTIATEVERSION {
 		NTSSPObj.Version = NTLMSSP_Auth_Bytes[64:72]
@@ -243,13 +245,12 @@ func ParseNTLMSSP_Auth(NTLMSSP_Auth_Bytes []byte) (NTLMSSP_Auth, error) {
 		}
 	}
 
-	//TODO add test cases for this
 	return NTSSPObj, nil
 
 }
 
 // Get the starting and ending points between two numbers
-// Only works when the fields is following the format: fieldLen(2 bytes),fieldLenMan(2 bytes),fieldBufferOffset(4 bytes)
+// Only works when the fields is following the format: fieldLen(2 bytes),fieldLenMax(2 bytes),fieldBufferOffset(4 bytes)
 func getByteLocation(fields []byte) (int, int) {
 	Len := fields[0:2]
 	Offset := fields[4:8]
@@ -259,6 +260,7 @@ func getByteLocation(fields []byte) (int, int) {
 	return int(StartByte), int(EndByte)
 }
 
+// TODO move this to the PrintNTLMSSPStruc
 // Return a slice of human readable flags
 func getHumanNegoFlagNames(flags uint32) []string {
 	var flagsHumanReadable []string
@@ -362,6 +364,7 @@ type VersionStruct struct {
 	NTLMVersion  byte   //1 bytes, offset 7 ?
 }
 
+// Move this to the PrintNTLMSSPStruc
 // Returns a version string
 func (v *VersionStruct) HumanString() string {
 	major := v.ProductMajor
@@ -389,21 +392,6 @@ func getVersion(a []byte) (VersionStruct, error) {
 	return v, nil
 }
 
-type AVID struct {
-	MsvAvEOL             []byte `ntlmssp:"void"`          // 0x0000 Signify end of AVID
-	MsvAvNbComputerName  []byte `ntlmssp:"utf16lestring"` // 0x0001
-	MsvAvNbDomainName    []byte `ntlmssp:"utf16lestring"` // 0x0002
-	MsvAvDnsComputerName []byte `ntlmssp:"utf16lestring"` // 0x0003
-	MsvAvDnsDomainName   []byte `ntlmssp:"utf16lestring"` // 0x0004
-	MsvAvDnsTreeName     []byte `ntlmssp:"utf16lestring"` // 0x0005
-	MsvAvFlags           []byte `ntlmssp:"avFlags"`       // 0x0006
-	MsvAvTimestamp       []byte `ntlmssp:"avTime"`        // 0x0007
-	MsvAvSingleHost      []byte `ntlmssp:"tbd"`           // 0x0008
-	MsvAvTargetName      []byte `ntlmssp:"utf16lestring"` // 0x0009 CIFS/Targetname
-	MsvAvChannelBindings []byte `ntlmssp:"tbd"`           // 0x000A
-
-}
-
 func PrintNTLMSSPStruc(a interface{}) {
 	t := reflect.TypeOf(a)
 	v := reflect.ValueOf(a)
@@ -421,17 +409,66 @@ func PrintNTLMSSPStruc(a interface{}) {
 			} else {
 				fmt.Printf("%s: %s\n", field, decode)
 			}
+		case "hexstring":
+			decode := data.Interface().([]byte)
+			fmt.Printf("%s: %x\n", field, decode)
+		case "version":
+			version, err := getVersion(data.Interface().([]byte))
+			if err != nil {
+				fmt.Printf("%s: Error Getting Version. %v \n", field, err)
+			} else {
+				fmt.Printf("%s: %s\n", field, version.HumanString())
+			}
+		case "time":
+			timedecode := encodeutil.FiletimeBytesToTime(data.Interface().([]byte))
+			fmt.Printf("%s: %s\n", field, timedecode.Local())
+
+		case "MessageType":
+			mtype := binary.LittleEndian.Uint32(data.Interface().([]byte))
+			var mtypename string
+			switch mtype {
+			case NEGOTIATE_MESSAGE:
+				mtypename = "NEGOTIATE_MESSAGE (0x1)"
+			case CHALLENGE_MESSAGE:
+				mtypename = "CHALLENGE_MESSAGE (0x2)"
+			case AUTHENTICATE_MESSAGE:
+				mtypename = "AUTHENTICATE_MESSAGE (0x3)"
+			default:
+				mtypename = fmt.Sprintf("UNKNOWN MESSAGE TYPE (%d)", mtype)
+			}
+			fmt.Printf("%s: %s\n", field, mtypename)
+
 		default:
 			fmt.Printf("%s: Not Yet Implemented\n", field)
 
 		}
+
 		//fmt.Printf("%v: %v - %v\n", , tag)
 	}
 }
 
-// Returns a readable version of Target Info.
+type AVID struct {
+	MsvAvEOL             []byte `ntlmssp:"void"`          // 0x0000 Signify end of AVID
+	MsvAvNbComputerName  []byte `ntlmssp:"utf16lestring"` // 0x0001
+	MsvAvNbDomainName    []byte `ntlmssp:"utf16lestring"` // 0x0002
+	MsvAvDnsComputerName []byte `ntlmssp:"utf16lestring"` // 0x0003
+	MsvAvDnsDomainName   []byte `ntlmssp:"utf16lestring"` // 0x0004
+	MsvAvDnsTreeName     []byte `ntlmssp:"utf16lestring"` // 0x0005
+	MsvAvFlags           []byte `ntlmssp:"avFlags"`       // 0x0006
+	MsvAvTimestamp       []byte `ntlmssp:"time"`          // 0x0007
+	MsvAvSingleHost      []byte `ntlmssp:"tbd"`           // 0x0008
+	MsvAvTargetName      []byte `ntlmssp:"utf16lestring"` // 0x0009 CIFS/Targetname
+	MsvAvChannelBindings []byte `ntlmssp:"tbd"`           // 0x000A
+
+}
+
+func (a *AVID) Readable() {
+	PrintNTLMSSPStruc(*a)
+}
+
+// Returns a AVID obj Target Info.
 // 2.2.2.1 AV_PAIR https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-NLMP/%5bMS-NLMP%5d.pdf
-func getHumanNegoTargetInfo(avidbytes []byte) (AVID, error) {
+func getAVIDObj(avidbytes []byte) (AVID, error) {
 	var AVobj AVID
 	counter := uint16(0)
 
