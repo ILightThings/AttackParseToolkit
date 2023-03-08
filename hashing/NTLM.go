@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/ILightThings/AttackParseToolkit/encodeutil"
@@ -97,7 +98,7 @@ type NTLMSSP_Challenge struct {
 
 // Prints a human readble verson of the NTLMSSP_Challenge to the console
 func (a *NTLMSSP_Challenge) Readable() error {
-	pr_TargetName, err := encodeutil.DecodeUTF16leBytes(a.NTLM_Message_Type)
+	pr_TargetName, err := encodeutil.DecodeUTF16leBytes(a.TargetName)
 	if err != nil {
 		return err
 	}
@@ -354,17 +355,17 @@ func getHumanNegoFlagNames(flags uint32) []string {
 }
 
 type VersionStruct struct {
-	ProductMajor []byte //1 bytes, offset 0
-	ProductMinor []byte //1 bytes, offset 1
+	ProductMajor byte   //1 bytes, offset 0
+	ProductMinor byte   //1 bytes, offset 1
 	ProductBuild []byte //2 bytes, offset 2
 	Reserved     []byte //3 bytes, offset 4
-	NTLMVersion  []byte //1 bytes, offset 7 ?
+	NTLMVersion  byte   //1 bytes, offset 7 ?
 }
 
 // Returns a version string
 func (v *VersionStruct) HumanString() string {
-	major := binary.LittleEndian.Uint16(v.ProductMajor)
-	minor := binary.LittleEndian.Uint16(v.ProductMinor)
+	major := v.ProductMajor
+	minor := v.ProductMinor
 	build := binary.LittleEndian.Uint16(v.ProductBuild)
 
 	return fmt.Sprintf("Version %d.%d (Build %d)", major, minor, build)
@@ -379,21 +380,100 @@ func getVersion(a []byte) (VersionStruct, error) {
 	}
 
 	var v VersionStruct
-	v.ProductMajor = []byte{a[0]}
-	v.ProductMinor = []byte{a[1]}
+	v.ProductMajor = a[0]
+	v.ProductMinor = a[1]
 	v.ProductBuild = a[2:4]
 	v.Reserved = a[4:7]
-	v.NTLMVersion = []byte{a[8]}
+	v.NTLMVersion = a[7]
 
 	return v, nil
 }
 
-// TODO figure out how to parse AVID
 type AVID struct {
+	MsvAvEOL             []byte `ntlmssp:"void"`          // 0x0000 Signify end of AVID
+	MsvAvNbComputerName  []byte `ntlmssp:"utf16lestring"` // 0x0001
+	MsvAvNbDomainName    []byte `ntlmssp:"utf16lestring"` // 0x0002
+	MsvAvDnsComputerName []byte `ntlmssp:"utf16lestring"` // 0x0003
+	MsvAvDnsDomainName   []byte `ntlmssp:"utf16lestring"` // 0x0004
+	MsvAvDnsTreeName     []byte `ntlmssp:"utf16lestring"` // 0x0005
+	MsvAvFlags           []byte `ntlmssp:"avFlags"`       // 0x0006
+	MsvAvTimestamp       []byte `ntlmssp:"avTime"`        // 0x0007
+	MsvAvSingleHost      []byte `ntlmssp:"tbd"`           // 0x0008
+	MsvAvTargetName      []byte `ntlmssp:"utf16lestring"` // 0x0009 CIFS/Targetname
+	MsvAvChannelBindings []byte `ntlmssp:"tbd"`           // 0x000A
+
+}
+
+func PrintNTLMSSPStruc(a interface{}) {
+	t := reflect.TypeOf(a)
+	v := reflect.ValueOf(a)
+	for i := 0; i < t.NumField(); i++ {
+		tag := t.Field(i).Tag.Get("ntlmssp")
+		data := v.Field(i)
+		field := t.Field(i).Name
+
+		switch tag {
+		case "utf16lestring":
+			//I have to learn more about this nonsense
+			decode, err := encodeutil.DecodeUTF16leBytes(data.Interface().([]byte))
+			if err != nil {
+				fmt.Printf("%s: Error Decoding: %s\n", field, err.Error())
+			} else {
+				fmt.Printf("%s: %s\n", field, decode)
+			}
+		default:
+			fmt.Printf("%s: Not Yet Implemented\n", field)
+
+		}
+		//fmt.Printf("%v: %v - %v\n", , tag)
+	}
 }
 
 // Returns a readable version of Target Info.
 // 2.2.2.1 AV_PAIR https://winprotocoldoc.blob.core.windows.net/productionwindowsarchives/MS-NLMP/%5bMS-NLMP%5d.pdf
-func getHumanNegoTargetInfo() {
+func getHumanNegoTargetInfo(avidbytes []byte) (AVID, error) {
+	var AVobj AVID
+	counter := uint16(0)
+
+	for {
+		var AVtype uint16
+		var AVlen uint16
+		var AVsubject []byte
+
+		//Break statement if MsvAvEOL
+		AVtype = encodeutil.BytesToUint16(avidbytes[counter : counter+2])
+		if AVtype == 0 {
+			break
+		}
+		AVlen = encodeutil.BytesToUint16(avidbytes[counter+2 : counter+4])
+		AVsubject = (avidbytes[counter+4 : counter+4+AVlen])
+		switch AVtype {
+		case 1:
+			AVobj.MsvAvNbComputerName = AVsubject
+		case 2:
+			AVobj.MsvAvNbDomainName = AVsubject
+		case 3:
+			AVobj.MsvAvDnsComputerName = AVsubject
+		case 4:
+			AVobj.MsvAvDnsDomainName = AVsubject
+		case 5:
+			AVobj.MsvAvDnsTreeName = AVsubject
+		case 6:
+			AVobj.MsvAvFlags = AVsubject
+		case 7:
+			AVobj.MsvAvTimestamp = AVsubject
+		case 8:
+			AVobj.MsvAvSingleHost = AVsubject
+		case 9:
+			AVobj.MsvAvTargetName = AVsubject
+		case 10:
+			AVobj.MsvAvChannelBindings = AVsubject
+
+		}
+		counter += 4 + AVlen
+
+	}
+
+	return AVobj, nil
 
 }
