@@ -129,7 +129,6 @@ func (a *NTLMSSP_Challenge) Readable() {
 }
 
 // Parses the NTLMSSP_Challenge to a NTLMSSP_Challenge struct
-// TODO implement the getByteLocation into this parser to make it easier to read
 func ParseNTLMSSP_Challenge(NTLMSSP_Challenge_Bytes []byte) (NTLMSSP_Challenge, error) {
 	var NTSSPObj NTLMSSP_Challenge
 
