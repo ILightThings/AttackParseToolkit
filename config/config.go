@@ -44,6 +44,7 @@ func CreateConfigFolder(configFolderName string) (string, error) {
 
 }
 
+// Checks for config file. Will return a file path. Will return error if does not exist.
 func ConfigFileExists(configFolderName string, configFileNamestring string) (string, error) {
 	folderPath, err := GetConfigFolderPath(configFolderName)
 	if err != nil {
