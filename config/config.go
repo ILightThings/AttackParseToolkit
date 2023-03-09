@@ -60,7 +60,7 @@ func ConfigFileExists(configFolderName string, configFileNamestring string) (str
 
 }
 
-// If folder exists, return folderpath and error
+// If folder exists, return folderpath and error.
 func ConfigFolderExists(configFolderName string) (string, error) {
 	configFolderPath, err := GetConfigFolderPath(configFolderName)
 	if err != nil {
