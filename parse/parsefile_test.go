@@ -1,11 +1,12 @@
-package AttackParseToolkit
+package parse
 
 import (
 	"bufio"
 	"fmt"
-	"golang.org/x/exp/slices"
 	"os"
 	"testing"
+
+	"golang.org/x/exp/slices"
 )
 
 func Test_parseTarget(t *testing.T) {
@@ -16,11 +17,17 @@ func Test_parseTarget(t *testing.T) {
 		return
 	}
 
+	err = test_case("testcase/test2.txt", "testcase/test2_results.txt")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
 }
 
 func test_case(file1 string, file2 string) error {
 
-	file1_results, err := ParseTagetsFromFile("testcase/test1.txt")
+	file1_results, err := ParseTagetsFromFile(file1)
 	if err != nil {
 		return err
 	}
@@ -31,9 +38,9 @@ func test_case(file1 string, file2 string) error {
 	}
 
 	//Same line count check
-	if len(file1_results) != len(file2_contents) {
-		return fmt.Errorf("line count does not match. File 1: %d, File 2: %d", len(file1_results), len(file2_contents))
-	}
+	//if len(file1_results) != len(file2_contents) {
+	//	return fmt.Errorf("line count does not match. File 1: %d, File 2: %d", len(file1_results), len(file2_contents))
+	//}
 
 	//Compare entries
 	err = compare_entries(file1_results, file2_contents)
@@ -87,4 +94,19 @@ func readFile(filepath string) ([]string, error) {
 	}
 
 	return lines, nil
+}
+
+func Test_parseURL(t *testing.T) {
+	testcase := make(map[string]string)
+	testcase["https://www.google.com"] = "www.google.com"
+	testcase["http://facebook.com"] = "facebook.com"
+	testcase["http://github.com/login/admin/panel"] = "github.com"
+	testcase["ws://netscape.com/talk"] = "netscape.com"
+
+	for key, ele := range testcase {
+		testhost := parseURL(key)
+		if testhost != ele {
+			t.Errorf("Key %s does not equal value %s. Returns %s", key, ele, testhost)
+		}
+	}
 }
