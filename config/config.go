@@ -44,9 +44,22 @@ func CreateConfigFolder(configFolderName string) (string, error) {
 
 }
 
-func ConfigFileExists()
+func ConfigFileExists(configFolderName string, configFileNamestring string) (string, error) {
+	folderPath, err := GetConfigFolderPath(configFolderName)
+	if err != nil {
+		return "", err
+	}
+	configFilePath := GetConfigFilePath(folderPath, configFileNamestring)
 
-// If folder exists, return folderpath, else returns error
+	if _, err := os.Stat(configFilePath); !os.IsNotExist(err) {
+		return configFilePath, nil
+	} else {
+		return configFilePath, err
+	}
+
+}
+
+// If folder exists, return folderpath and error
 func ConfigFolderExists(configFolderName string) (string, error) {
 	configFolderPath, err := GetConfigFolderPath(configFolderName)
 	if err != nil {
